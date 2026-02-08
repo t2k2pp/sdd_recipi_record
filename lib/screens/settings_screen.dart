@@ -16,6 +16,7 @@ import '../services/export_service.dart';
 import '../services/image_service.dart';
 import '../services/import_service.dart';
 import 'genre_manager_screen.dart';
+import 'unit_manager_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -88,6 +89,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       final existingRecipes = AppRepository.getRecipes();
       final existingGenres = AppRepository.getGenres();
+      var existingUnits = AppRepository.getUnits();
 
       final existingHash = _findDuplicateHash(payload.hash, existingRecipes);
       if (existingHash != null) {
@@ -103,6 +105,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 baseServings: 0,
                 ingredients: [],
                 steps: '',
+                stepsFormat: StepsFormat.markdown,
+                coverImagePath: null,
                 images: [],
                 createdAt: DateTime.now(),
                 updatedAt: DateTime.now(),
@@ -117,6 +121,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final genreId = await _resolveGenreId(genreName, existingGenres);
       final baseDir = await ImageService.baseDir();
 
+      final coverPath = recipeMap['coverImagePath']?.toString();
+      if (coverPath != null && coverPath.isNotEmpty) {
+        final bytes = payload.files['images/$coverPath'];
+        if (bytes != null) {
+          final newPath = await _writeImageFile(baseDir, coverPath, bytes);
+          recipeMap['coverImagePath'] = newPath;
+        } else {
+          recipeMap['coverImagePath'] = null;
+        }
+      }
+
       for (final imageMap in recipeMap['images'] as List? ?? []) {
         final map = imageMap as Map;
         final oldPath = map['path']?.toString();
@@ -126,6 +141,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         final newPath = await _writeImageFile(baseDir, oldPath, bytes);
         map['path'] = newPath;
         map['id'] = const Uuid().v4();
+      }
+
+      for (final ingredientMap in recipeMap['ingredients'] as List? ?? []) {
+        final map = Map<String, dynamic>.from(ingredientMap as Map);
+        final unitName = map['unit']?.toString().trim() ?? '';
+        if (unitName.isEmpty) continue;
+        final exists = existingUnits.any((unit) => unit.name == unitName);
+        if (!exists) {
+          final usesNumber = map['quantity'] != null;
+          final created = await AppRepository.addUnit(unitName, usesNumber);
+          existingUnits = [...existingUnits, created];
+        }
       }
 
       for (final logMap in logsMap) {
@@ -347,6 +374,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 },
               ),
               ListTile(
+                title: const Text('単位編集'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const UnitManagerScreen(),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
                 title: const Text('レシピをインポート'),
                 trailing: _importing
                     ? const SizedBox(
@@ -401,6 +439,8 @@ extension RecipeCopy on Recipe {
         baseServings: baseServings,
         ingredients: ingredients,
         steps: steps,
+        stepsFormat: stepsFormat,
+        coverImagePath: coverImagePath,
         images: images,
         createdAt: createdAt,
         updatedAt: DateTime.now(),
@@ -413,6 +453,8 @@ extension RecipeCopy on Recipe {
         baseServings: baseServings,
         ingredients: ingredients,
         steps: steps,
+        stepsFormat: stepsFormat,
+        coverImagePath: coverImagePath,
         images: images,
         createdAt: createdAt,
         updatedAt: DateTime.now(),
@@ -425,6 +467,8 @@ extension RecipeCopy on Recipe {
         baseServings: baseServings,
         ingredients: ingredients,
         steps: steps,
+        stepsFormat: stepsFormat,
+        coverImagePath: coverImagePath,
         images: images,
         createdAt: createdAt,
         updatedAt: DateTime.now(),

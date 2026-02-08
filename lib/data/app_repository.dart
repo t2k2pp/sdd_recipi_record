@@ -9,6 +9,7 @@ import '../models/genre.dart';
 import '../models/ingredient.dart';
 import '../models/recipe.dart';
 import '../models/recipe_image.dart';
+import '../models/unit_definition.dart';
 import 'app_storage.dart';
 
 class AppRepository {
@@ -36,6 +37,25 @@ class AppRepository {
         await genresBox.put(genre.id, genre.toMap());
       }
     }
+
+    final unitsBox = AppStorage.unitsBox();
+    if (unitsBox.isEmpty) {
+      final defaults = <UnitDefinition>[
+        UnitDefinition(id: _uuid.v4(), name: 'g', usesNumber: true),
+        UnitDefinition(id: _uuid.v4(), name: 'ml', usesNumber: true),
+        UnitDefinition(id: _uuid.v4(), name: 'cc', usesNumber: true),
+        UnitDefinition(id: _uuid.v4(), name: '大さじ', usesNumber: true),
+        UnitDefinition(id: _uuid.v4(), name: '小さじ', usesNumber: true),
+        UnitDefinition(id: _uuid.v4(), name: '個', usesNumber: true),
+        UnitDefinition(id: _uuid.v4(), name: '片', usesNumber: true),
+        UnitDefinition(id: _uuid.v4(), name: '少々', usesNumber: false),
+        UnitDefinition(id: _uuid.v4(), name: '適量', usesNumber: false),
+        UnitDefinition(id: _uuid.v4(), name: 'お好み', usesNumber: false),
+      ];
+      for (final unit in defaults) {
+        await unitsBox.put(unit.id, unit.toMap());
+      }
+    }
   }
 
   static AppSettings getSettings() {
@@ -52,6 +72,31 @@ class AppRepository {
         .values
         .map((e) => Genre.fromMap(Map<String, dynamic>.from(e)))
         .toList();
+  }
+
+  static List<UnitDefinition> getUnits() {
+    return AppStorage.unitsBox()
+        .values
+        .map((e) => UnitDefinition.fromMap(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  static Future<UnitDefinition> addUnit(String name, bool usesNumber) async {
+    final unit = UnitDefinition(
+      id: _uuid.v4(),
+      name: name,
+      usesNumber: usesNumber,
+    );
+    await AppStorage.unitsBox().put(unit.id, unit.toMap());
+    return unit;
+  }
+
+  static Future<void> updateUnit(UnitDefinition unit) async {
+    await AppStorage.unitsBox().put(unit.id, unit.toMap());
+  }
+
+  static Future<void> deleteUnit(String unitId) async {
+    await AppStorage.unitsBox().delete(unitId);
   }
 
   static Future<Genre> addGenre(String name) async {
@@ -78,6 +123,8 @@ class AppRepository {
           baseServings: recipe.baseServings,
           ingredients: recipe.ingredients,
           steps: recipe.steps,
+          stepsFormat: recipe.stepsFormat,
+          coverImagePath: recipe.coverImagePath,
           images: recipe.images,
           createdAt: recipe.createdAt,
           updatedAt: DateTime.now(),
@@ -114,6 +161,8 @@ class AppRepository {
     required double baseServings,
     required List<Ingredient> ingredients,
     required String steps,
+    required StepsFormat stepsFormat,
+    required String? coverImagePath,
     required List<RecipeImage> images,
   }) async {
     final now = DateTime.now();
@@ -124,6 +173,8 @@ class AppRepository {
       baseServings: baseServings,
       ingredients: ingredients,
       steps: steps,
+      stepsFormat: stepsFormat,
+      coverImagePath: coverImagePath,
       images: images,
       createdAt: now,
       updatedAt: now,
@@ -135,6 +186,12 @@ class AppRepository {
   static Future<void> deleteRecipe(String id, {required Directory imagesDir}) async {
     final recipe = getRecipe(id);
     if (recipe != null) {
+      if (recipe.coverImagePath != null) {
+        final file = File(path.join(imagesDir.path, recipe.coverImagePath!));
+        if (await file.exists()) {
+          await file.delete();
+        }
+      }
       for (final image in recipe.images) {
         final file = File(path.join(imagesDir.path, image.path));
         if (await file.exists()) {
@@ -175,6 +232,12 @@ class AppRepository {
   static Future<void> deleteAllData({required Directory imagesDir}) async {
     final recipes = getRecipes();
     for (final recipe in recipes) {
+      if (recipe.coverImagePath != null) {
+        final file = File(path.join(imagesDir.path, recipe.coverImagePath!));
+        if (await file.exists()) {
+          await file.delete();
+        }
+      }
       for (final image in recipe.images) {
         final file = File(path.join(imagesDir.path, image.path));
         if (await file.exists()) {
@@ -198,6 +261,7 @@ class AppRepository {
     await AppStorage.logsBox().clear();
     await AppStorage.genresBox().clear();
     await AppStorage.settingsBox().clear();
+    await AppStorage.unitsBox().clear();
     await ensureDefaults();
   }
 

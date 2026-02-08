@@ -183,9 +183,10 @@ class _RecipeListScreenState extends State<RecipeListScreen> {
                                         orElse: () => genres.first,
                                       );
                                       final imagePath =
-                                          recipe.images.isNotEmpty
+                                          recipe.coverImagePath ??
+                                          (recipe.images.isNotEmpty
                                               ? recipe.images.first.path
-                                              : null;
+                                              : null);
                                       return GestureDetector(
                                         onTap: () {
                                           Navigator.of(context).push(
@@ -261,9 +262,10 @@ class _RecipeListScreenState extends State<RecipeListScreen> {
                                         orElse: () => genres.first,
                                       );
                                       final imagePath =
-                                          recipe.images.isNotEmpty
+                                          recipe.coverImagePath ??
+                                          (recipe.images.isNotEmpty
                                               ? recipe.images.first.path
-                                              : null;
+                                              : null);
                                       return ListTile(
                                         leading: FutureBuilder<ImageProvider?>(
                                           future: _buildImage(imagePath),

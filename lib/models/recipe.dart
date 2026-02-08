@@ -1,6 +1,11 @@
 import 'ingredient.dart';
 import 'recipe_image.dart';
 
+enum StepsFormat {
+  markdown,
+  marp,
+}
+
 class Recipe {
   Recipe({
     required this.id,
@@ -9,6 +14,8 @@ class Recipe {
     required this.baseServings,
     required this.ingredients,
     required this.steps,
+    required this.stepsFormat,
+    required this.coverImagePath,
     required this.images,
     required this.createdAt,
     required this.updatedAt,
@@ -20,6 +27,8 @@ class Recipe {
   final double baseServings;
   final List<Ingredient> ingredients;
   final String steps;
+  final StepsFormat stepsFormat;
+  final String? coverImagePath;
   final List<RecipeImage> images;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -31,6 +40,8 @@ class Recipe {
         'baseServings': baseServings,
         'ingredients': ingredients.map((e) => e.toMap()).toList(),
         'steps': steps,
+        'stepsFormat': stepsFormat.name,
+        'coverImagePath': coverImagePath,
         'images': images.map((e) => e.toMap()).toList(),
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': updatedAt.toIso8601String(),
@@ -45,6 +56,8 @@ class Recipe {
             .map((e) => Ingredient.fromMap(Map<String, dynamic>.from(e)))
             .toList(),
         steps: (map['steps'] ?? '').toString(),
+        stepsFormat: _parseStepsFormat(map['stepsFormat']?.toString()),
+        coverImagePath: map['coverImagePath']?.toString(),
         images: (map['images'] as List? ?? [])
             .map((e) => RecipeImage.fromMap(Map<String, dynamic>.from(e)))
             .toList(),
@@ -53,4 +66,14 @@ class Recipe {
         updatedAt: DateTime.tryParse((map['updatedAt'] ?? '').toString()) ??
             DateTime.now(),
       );
+
+  static StepsFormat _parseStepsFormat(String? value) {
+    switch (value) {
+      case 'marp':
+        return StepsFormat.marp;
+      case 'markdown':
+      default:
+        return StepsFormat.markdown;
+    }
+  }
 }

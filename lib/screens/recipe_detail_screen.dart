@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
@@ -27,6 +28,8 @@ class RecipeDetailScreen extends StatefulWidget {
 
 class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
   late double _servings;
+  final PageController _marpController = PageController();
+  int _marpIndex = 0;
 
   @override
   void initState() {
@@ -46,6 +49,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
 
   @override
   void dispose() {
+    _marpController.dispose();
     WakelockPlus.disable();
     super.dispose();
   }
@@ -139,7 +143,8 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
               orElse: () => AppRepository.getGenres().first,
             );
             final headerImagePath =
-                recipe.images.isNotEmpty ? recipe.images.first.path : null;
+                recipe.coverImagePath ??
+                (recipe.images.isNotEmpty ? recipe.images.first.path : null);
 
             return Scaffold(
               appBar: AppBar(
@@ -268,7 +273,15 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 8),
-                  ..._buildStepLines(recipe.steps),
+                  if (recipe.stepsFormat == StepsFormat.markdown)
+                    MarkdownBody(
+                      data: recipe.steps,
+                      styleSheet: MarkdownStyleSheet.fromTheme(
+                        Theme.of(context),
+                      ),
+                    )
+                  else
+                    _buildMarpViewer(recipe.steps),
                   if (recipe.images.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     Text(
@@ -420,22 +433,76 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
     );
   }
 
-  List<Widget> _buildStepLines(String steps) {
-    final lines = steps.split('\n');
-    var index = 1;
-    return lines
-        .where((line) => line.trim().isNotEmpty)
-        .map((line) => Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('${index++}. '),
-                  Expanded(child: Text(line.trim())),
-                ],
-              ),
-            ))
+  Widget _buildMarpViewer(String steps) {
+    final pages = _splitMarpPages(steps);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          height: 320,
+          child: PageView.builder(
+            controller: _marpController,
+            itemCount: pages.length,
+            onPageChanged: (index) {
+              setState(() => _marpIndex = index);
+            },
+            itemBuilder: (context, index) {
+              return Card(
+                margin: EdgeInsets.zero,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: SingleChildScrollView(
+                    child: MarkdownBody(
+                      data: pages[index],
+                      styleSheet: MarkdownStyleSheet.fromTheme(
+                        Theme.of(context),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            TextButton.icon(
+              onPressed: _marpIndex == 0
+                  ? null
+                  : () => _marpController.previousPage(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOut,
+                      ),
+              icon: const Icon(Icons.chevron_left),
+              label: const Text('前へ'),
+            ),
+            Text('${_marpIndex + 1} / ${pages.length}'),
+            TextButton.icon(
+              onPressed: _marpIndex >= pages.length - 1
+                  ? null
+                  : () => _marpController.nextPage(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOut,
+                      ),
+              icon: const Icon(Icons.chevron_right),
+              label: const Text('次へ'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  List<String> _splitMarpPages(String steps) {
+    final normalized = steps.replaceAll('\r\n', '\n');
+    final pages = normalized
+        .split(RegExp(r'^\s*---\s*$', multiLine: true))
+        .map((page) => page.trim())
+        .where((page) => page.isNotEmpty)
         .toList();
+    return pages.isEmpty ? [''] : pages;
   }
 
   Future<bool> _confirmDelete() async {

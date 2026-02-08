@@ -8,6 +8,7 @@ import '../data/app_repository.dart';
 import '../models/ingredient.dart';
 import '../models/recipe.dart';
 import '../models/recipe_image.dart';
+import '../models/unit_definition.dart';
 import '../services/image_service.dart';
 
 class RecipeEditorScreen extends StatefulWidget {
@@ -28,6 +29,9 @@ class _RecipeEditorScreenState extends State<RecipeEditorScreen> {
 
   late List<_IngredientDraft> _ingredients;
   late List<_ImageDraft> _images;
+  StepsFormat _stepsFormat = StepsFormat.markdown;
+  File? _coverImageFile;
+  String? _coverImagePath;
   String? _genreId;
   bool _saving = false;
 
@@ -40,6 +44,8 @@ class _RecipeEditorScreenState extends State<RecipeEditorScreen> {
     _servingsController.text =
         (recipe?.baseServings ?? settings.defaultServings).toString();
     _stepsController.text = recipe?.steps ?? '';
+    _stepsFormat = recipe?.stepsFormat ?? StepsFormat.markdown;
+    _coverImagePath = recipe?.coverImagePath;
     _genreId = recipe?.genreId ?? AppRepository.uncategorizedId();
     _ingredients = (recipe?.ingredients ?? [])
         .map((e) => _IngredientDraft.fromIngredient(e))
@@ -82,6 +88,22 @@ class _RecipeEditorScreenState extends State<RecipeEditorScreen> {
     });
   }
 
+  Future<void> _pickCoverImage() async {
+    final picker = ImagePicker();
+    final file = await picker.pickImage(source: ImageSource.gallery);
+    if (file == null) return;
+    setState(() {
+      _coverImageFile = File(file.path);
+    });
+  }
+
+  void _removeCoverImage() {
+    setState(() {
+      _coverImageFile = null;
+      _coverImagePath = null;
+    });
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -107,6 +129,25 @@ class _RecipeEditorScreenState extends State<RecipeEditorScreen> {
           .toList();
 
       final baseDir = await ImageService.baseDir();
+      String? coverImagePath;
+      final existingCoverPath = widget.existing?.coverImagePath;
+      if (_coverImageFile != null) {
+        coverImagePath = await ImageService.saveRecipeImage(_coverImageFile!);
+        if (existingCoverPath != null && existingCoverPath != coverImagePath) {
+          final file = File('${baseDir.path}/$existingCoverPath');
+          if (await file.exists()) {
+            await file.delete();
+          }
+        }
+      } else if (_coverImagePath != null) {
+        coverImagePath = _coverImagePath;
+      } else if (existingCoverPath != null) {
+        final file = File('${baseDir.path}/$existingCoverPath');
+        if (await file.exists()) {
+          await file.delete();
+        }
+      }
+
       final existingPaths = widget.existing?.images.map((e) => e.path).toSet() ??
           <String>{};
       final keepPaths = <String>{};
@@ -151,6 +192,8 @@ class _RecipeEditorScreenState extends State<RecipeEditorScreen> {
         baseServings: baseServings,
         ingredients: ingredients,
         steps: _stepsController.text.trim(),
+        stepsFormat: _stepsFormat,
+        coverImagePath: coverImagePath,
         images: images,
         createdAt: widget.existing?.createdAt ?? now,
         updatedAt: now,
@@ -180,6 +223,14 @@ class _RecipeEditorScreenState extends State<RecipeEditorScreen> {
   @override
   Widget build(BuildContext context) {
     final genres = AppRepository.getGenres();
+    final units = AppRepository.getUnits();
+    final ingredientSuggestions = AppRepository.getRecipes()
+        .expand((recipe) => recipe.ingredients)
+        .map((ingredient) => ingredient.name)
+        .where((name) => name.trim().isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.existing == null ? 'レシピ登録' : 'レシピ編集'),
@@ -216,6 +267,21 @@ class _RecipeEditorScreenState extends State<RecipeEditorScreen> {
               onChanged: (value) => setState(() => _genreId = value),
               decoration: const InputDecoration(
                 labelText: 'ジャンル',
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '出来上がり写真',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            _buildCoverImageCard(),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _pickCoverImage,
+                icon: const Icon(Icons.photo_camera_outlined),
+                label: const Text('出来上がり写真を選ぶ'),
               ),
             ),
             const SizedBox(height: 12),
@@ -256,57 +322,11 @@ class _RecipeEditorScreenState extends State<RecipeEditorScreen> {
                 return Padding(
                   key: ValueKey(ingredient),
                   padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Row(
-                    children: [
-                      ReorderableDragStartListener(
-                        index: index,
-                        child: const Padding(
-                          padding: EdgeInsets.only(right: 8),
-                          child: Icon(Icons.drag_handle),
-                        ),
-                      ),
-                      Expanded(
-                        flex: 3,
-                        child: TextField(
-                          controller: ingredient.nameController,
-                          decoration: const InputDecoration(
-                            labelText: '材料名',
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 2,
-                        child: TextField(
-                          controller: ingredient.quantityController,
-                          decoration: const InputDecoration(
-                            labelText: '分量',
-                          ),
-                          keyboardType: TextInputType.number,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 2,
-                        child: TextField(
-                          controller: ingredient.unitController,
-                          decoration: const InputDecoration(
-                            labelText: '単位',
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: _ingredients.length == 1
-                            ? null
-                            : () {
-                                setState(() {
-                                  final removed = _ingredients.removeAt(index);
-                                  removed.dispose();
-                                });
-                              },
-                        icon: const Icon(Icons.remove_circle_outline),
-                      ),
-                    ],
+                  child: _buildIngredientRow(
+                    index: index,
+                    ingredient: ingredient,
+                    units: units,
+                    ingredientSuggestions: ingredientSuggestions,
                   ),
                 );
               },
@@ -329,6 +349,31 @@ class _RecipeEditorScreenState extends State<RecipeEditorScreen> {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
+            DropdownButtonFormField<StepsFormat>(
+              key: ValueKey(_stepsFormat),
+              initialValue: _stepsFormat,
+              items: const [
+                DropdownMenuItem(
+                  value: StepsFormat.markdown,
+                  child: Text('Markdown形式'),
+                ),
+                DropdownMenuItem(
+                  value: StepsFormat.marp,
+                  child: Text('Marp形式'),
+                ),
+              ],
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() => _stepsFormat = value);
+              },
+              decoration: const InputDecoration(labelText: '表示形式'),
+            ),
+            const SizedBox(height: 8),
+            if (_stepsFormat == StepsFormat.marp)
+              const Text(
+                'Marpは「---」でページ区切りします。',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
             TextField(
               controller: _stepsController,
               decoration: const InputDecoration(
@@ -415,6 +460,198 @@ class _RecipeEditorScreenState extends State<RecipeEditorScreen> {
     );
   }
 
+  Widget _buildCoverImageCard() {
+    if (_coverImageFile != null) {
+      return Stack(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.file(
+              _coverImageFile!,
+              height: 180,
+              width: double.infinity,
+              fit: BoxFit.cover,
+            ),
+          ),
+          Positioned(
+            right: 8,
+            top: 8,
+            child: IconButton(
+              icon: const Icon(Icons.close),
+              color: Colors.black87,
+              onPressed: _removeCoverImage,
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (_coverImagePath != null) {
+      return FutureBuilder<File>(
+        future: ImageService.resolveRelativePath(_coverImagePath!),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData || !snapshot.data!.existsSync()) {
+            return _buildCoverPlaceholder();
+          }
+          return Stack(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.file(
+                  snapshot.data!,
+                  height: 180,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              Positioned(
+                right: 8,
+                top: 8,
+                child: IconButton(
+                  icon: const Icon(Icons.close),
+                  color: Colors.black87,
+                  onPressed: _removeCoverImage,
+                ),
+              ),
+            ],
+          );
+        },
+      );
+    }
+
+    return _buildCoverPlaceholder();
+  }
+
+  Widget _buildCoverPlaceholder() {
+    return Container(
+      height: 180,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      ),
+      child: const Center(child: Icon(Icons.photo_outlined)),
+    );
+  }
+
+  Widget _buildIngredientRow({
+    required int index,
+    required _IngredientDraft ingredient,
+    required List<UnitDefinition> units,
+    required List<String> ingredientSuggestions,
+  }) {
+    final unitNames = units.map((e) => e.name).toSet();
+    final currentUnit = ingredient.unitController.text.trim();
+    final dropdownUnits = [
+      if (currentUnit.isNotEmpty && !unitNames.contains(currentUnit))
+        UnitDefinition(id: 'custom', name: currentUnit, usesNumber: true),
+      ...units,
+    ];
+
+    final selectedUnit = currentUnit.isEmpty ? null : currentUnit;
+    final usesNumber = _usesNumberForUnit(selectedUnit, units);
+
+    if (!usesNumber && ingredient.quantityController.text.trim().isNotEmpty) {
+      ingredient.quantityController.text = '';
+    }
+
+    return Row(
+      children: [
+        ReorderableDragStartListener(
+          index: index,
+          child: const Padding(
+            padding: EdgeInsets.only(right: 8),
+            child: Icon(Icons.drag_handle),
+          ),
+        ),
+        Expanded(
+          flex: 3,
+          child: Autocomplete<String>(
+            initialValue: TextEditingValue(text: ingredient.name),
+            optionsBuilder: (textEditingValue) {
+              final query = textEditingValue.text.trim();
+              if (query.isEmpty) return const Iterable<String>.empty();
+              return ingredientSuggestions.where(
+                (option) => option.contains(query),
+              );
+            },
+            onSelected: (value) => ingredient.name = value,
+            fieldViewBuilder: (context, controller, focusNode, onSubmit) {
+              return TextField(
+                controller: controller,
+                focusNode: focusNode,
+                decoration: const InputDecoration(
+                  labelText: '材料名',
+                ),
+                onChanged: (value) => ingredient.name = value,
+              );
+            },
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          flex: 2,
+          child: TextField(
+            controller: ingredient.quantityController,
+            decoration: const InputDecoration(
+              labelText: '分量',
+            ),
+            keyboardType: TextInputType.number,
+            enabled: usesNumber,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          flex: 2,
+          child: DropdownButtonFormField<String>(
+            key: ValueKey(selectedUnit),
+            initialValue: selectedUnit,
+            isExpanded: true,
+            items: dropdownUnits
+                .map(
+                  (unit) => DropdownMenuItem(
+                    value: unit.name,
+                    child: Text(unit.name),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) {
+              ingredient.unitController.text = value ?? '';
+              final nextUsesNumber = _usesNumberForUnit(value, units);
+              if (!nextUsesNumber) {
+                ingredient.quantityController.text = '';
+              }
+              setState(() {});
+            },
+            decoration: const InputDecoration(
+              labelText: '単位',
+            ),
+          ),
+        ),
+        IconButton(
+          onPressed: _ingredients.length == 1
+              ? null
+              : () {
+                  setState(() {
+                    final removed = _ingredients.removeAt(index);
+                    removed.dispose();
+                  });
+                },
+          icon: const Icon(Icons.remove_circle_outline),
+        ),
+      ],
+    );
+  }
+
+  bool _usesNumberForUnit(String? unitName, List<UnitDefinition> units) {
+    if (unitName == null || unitName.isEmpty) return true;
+    final unit = units.firstWhere(
+      (u) => u.name == unitName,
+      orElse: () => UnitDefinition(id: 'custom', name: unitName, usesNumber: true),
+    );
+    return unit.usesNumber;
+  }
+
   Widget _buildImagePreview(_ImageDraft draft) {
     final decoration = BoxDecoration(
       borderRadius: BorderRadius.circular(12),
@@ -468,31 +705,30 @@ class _RecipeEditorScreenState extends State<RecipeEditorScreen> {
 
 class _IngredientDraft {
   _IngredientDraft()
-      : nameController = TextEditingController(),
+      : name = '',
         quantityController = TextEditingController(),
         unitController = TextEditingController();
 
   _IngredientDraft.fromIngredient(Ingredient ingredient)
-      : nameController = TextEditingController(text: ingredient.name),
+      : name = ingredient.name,
         quantityController = TextEditingController(
             text: ingredient.quantity?.toString() ?? ''),
         unitController = TextEditingController(text: ingredient.unit);
 
-  final TextEditingController nameController;
+  String name;
   final TextEditingController quantityController;
   final TextEditingController unitController;
 
   Ingredient toIngredient() {
     final quantity = double.tryParse(quantityController.text.trim());
     return Ingredient(
-      name: nameController.text.trim(),
+      name: name.trim(),
       quantity: quantity,
       unit: unitController.text.trim(),
     );
   }
 
   void dispose() {
-    nameController.dispose();
     quantityController.dispose();
     unitController.dispose();
   }

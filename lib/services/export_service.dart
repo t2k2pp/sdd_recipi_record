@@ -50,6 +50,15 @@ class ExportService {
 
     final baseDir = await ImageService.baseDir();
 
+    if (recipe.coverImagePath != null) {
+      final file = File(path.join(baseDir.path, recipe.coverImagePath!));
+      if (await file.exists()) {
+        final bytes = await file.readAsBytes();
+        final zipPath = path.join('images', recipe.coverImagePath!);
+        archive.addFile(ArchiveFile(zipPath, bytes.length, bytes));
+      }
+    }
+
     for (final image in recipe.images) {
       final file = File(path.join(baseDir.path, image.path));
       if (await file.exists()) {
