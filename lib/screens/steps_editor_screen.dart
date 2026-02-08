@@ -71,6 +71,7 @@ class _StepsEditorScreenState extends State<StepsEditorScreen> {
                   hintText: '手順を入力してください',
                   border: OutlineInputBorder(),
                 ),
+                textAlignVertical: TextAlignVertical.top,
               ),
             ),
           ),
@@ -86,12 +87,12 @@ class _StepsEditorScreenState extends State<StepsEditorScreen> {
       child: Row(
         children: [
           _ToolButton(
-            label: 'H1',
+            label: '見出し1',
             icon: Icons.title,
             onTap: () => _insertText('# ', ''),
           ),
           _ToolButton(
-            label: 'H2',
+            label: '見出し2',
             icon: Icons.title,
             onTap: () => _insertText('## ', ''),
           ),
@@ -112,7 +113,7 @@ class _StepsEditorScreenState extends State<StepsEditorScreen> {
           ),
           if (widget.format == StepsFormat.marp)
             _ToolButton(
-              label: '区切り',
+              label: '改ページ',
               icon: Icons.view_carousel,
               onTap: () => _insertText('\n---\n', ''),
             ),
@@ -137,10 +138,18 @@ class _ToolButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: OutlinedButton.icon(
-        onPressed: onTap,
-        icon: Icon(icon, size: 18),
-        label: Text(label),
+      child: SizedBox(
+        height: 36,
+        child: OutlinedButton.icon(
+          onPressed: onTap,
+          icon: Icon(icon, size: 18),
+          label: Text(label),
+          style: OutlinedButton.styleFrom(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(6),
+            ),
+          ),
+        ),
       ),
     );
   }
