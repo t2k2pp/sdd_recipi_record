@@ -86,64 +86,69 @@ class _StepsEditorScreenState extends State<StepsEditorScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: Row(
         children: [
-          _ToolButton(
-            label: '見出し1',
-            icon: Icons.title,
-            onTap: () => _insertText('# ', ''),
+          PopupMenuButton<int>(
+            tooltip: '見出し',
+            onSelected: (level) => _insertText('${'#' * level} ', ''),
+            itemBuilder: (context) => List.generate(
+              6,
+              (index) => PopupMenuItem(
+                value: index + 1,
+                child: Text('見出し${index + 1}'),
+              ),
+            ),
+            child: const _ToolButton(
+              label: 'H',
+              icon: Icons.title,
+            ),
           ),
           _ToolButton(
-            label: '見出し2',
-            icon: Icons.title,
-            onTap: () => _insertText('## ', ''),
-          ),
-          _ToolButton(
-            label: '太字',
+            label: 'B',
             icon: Icons.format_bold,
             onTap: () => _insertText('**', '**'),
           ),
           _ToolButton(
-            label: '斜体',
+            label: 'I',
             icon: Icons.format_italic,
             onTap: () => _insertText('*', '*'),
           ),
           _ToolButton(
-            label: '箇条書き',
+            label: '*',
             icon: Icons.format_list_bulleted,
             onTap: () => _insertText('- ', ''),
           ),
           _ToolButton(
-            label: '番号リスト',
+            label: '1',
             icon: Icons.format_list_numbered,
             onTap: () => _insertText('1. ', ''),
           ),
           _ToolButton(
-            label: 'チェック',
+            label: 'C',
             icon: Icons.check_box_outlined,
             onTap: () => _insertText('- [ ] ', ''),
           ),
           _ToolButton(
-            label: '引用',
+            label: 'Q',
             icon: Icons.format_quote,
             onTap: () => _insertText('> ', ''),
           ),
           _ToolButton(
-            label: 'リンク',
+            label: 'L',
             icon: Icons.link,
             onTap: () => _insertText('[', '](https://)'),
           ),
           _ToolButton(
-            label: 'インデント',
+            label: '>',
             icon: Icons.format_indent_increase,
             onTap: () => _indentSelection(),
           ),
           _ToolButton(
-            label: '解除',
+            label: '<',
             icon: Icons.format_indent_decrease,
             onTap: () => _outdentSelection(),
           ),
           if (widget.format == StepsFormat.marp)
             _ToolButton(
-              label: '改ページ',
+              label: 'P',
               icon: Icons.view_carousel,
               onTap: () => _insertText('\n---\n', ''),
             ),
@@ -190,12 +195,12 @@ class _ToolButton extends StatelessWidget {
   const _ToolButton({
     required this.label,
     required this.icon,
-    required this.onTap,
+    this.onTap,
   });
 
   final String label;
   final IconData icon;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
