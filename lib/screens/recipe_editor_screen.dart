@@ -304,40 +304,84 @@ class _RecipeEditorScreenState extends State<RecipeEditorScreen> {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
-            ReorderableListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _ingredients.length,
-              onReorder: (oldIndex, newIndex) {
-                setState(() {
-                  if (newIndex > oldIndex) {
-                    newIndex -= 1;
-                  }
-                  final item = _ingredients.removeAt(oldIndex);
-                  _ingredients.insert(newIndex, item);
-                });
-              },
-              itemBuilder: (context, index) {
-                final ingredient = _ingredients[index];
-                return Padding(
-                  key: ValueKey(ingredient),
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: _buildIngredientRow(
-                    index: index,
-                    ingredient: ingredient,
-                    units: units,
-                    ingredientSuggestions: ingredientSuggestions,
-                  ),
-                );
-              },
-            ),
+            if (_ingredients.isEmpty)
+              const Text('材料を追加してください')
+            else
+              ReorderableListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: _ingredients.length,
+                onReorder: (oldIndex, newIndex) {
+                  setState(() {
+                    if (newIndex > oldIndex) {
+                      newIndex -= 1;
+                    }
+                    final item = _ingredients.removeAt(oldIndex);
+                    _ingredients.insert(newIndex, item);
+                  });
+                },
+                itemBuilder: (context, index) {
+                  final ingredient = _ingredients[index];
+                  return ListTile(
+                    key: ValueKey(ingredient),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 0),
+                    leading: ReorderableDragStartListener(
+                      index: index,
+                      child: const Icon(Icons.drag_handle),
+                    ),
+                    title: Text(_formatIngredientLabel(ingredient)),
+                    subtitle: ingredient.name.trim().isEmpty
+                        ? const Text('未入力')
+                        : null,
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined),
+                          onPressed: () => _openIngredientEditor(
+                            ingredient: ingredient,
+                            units: units,
+                            ingredientSuggestions: ingredientSuggestions,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: _ingredients.length == 1
+                              ? null
+                              : () {
+                                  setState(() {
+                                    final removed = _ingredients.removeAt(index);
+                                    removed.dispose();
+                                  });
+                                },
+                        ),
+                      ],
+                    ),
+                    onTap: () => _openIngredientEditor(
+                      ingredient: ingredient,
+                      units: units,
+                      ingredientSuggestions: ingredientSuggestions,
+                    ),
+                  );
+                },
+              ),
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _ingredients.add(_IngredientDraft());
-                  });
+                onPressed: () async {
+                  final draft = _IngredientDraft();
+                  final saved = await _openIngredientEditor(
+                    ingredient: draft,
+                    units: units,
+                    ingredientSuggestions: ingredientSuggestions,
+                  );
+                  if (saved == true) {
+                    setState(() {
+                      _ingredients.add(draft);
+                    });
+                  } else {
+                    draft.dispose();
+                  }
                 },
                 icon: const Icon(Icons.add),
                 label: const Text('材料を追加'),
@@ -374,6 +418,14 @@ class _RecipeEditorScreenState extends State<RecipeEditorScreen> {
                 'Marpは「---」でページ区切りします。',
                 style: TextStyle(fontSize: 12, color: Colors.grey),
               ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _openStepsEditor,
+                icon: const Icon(Icons.edit_note_outlined),
+                label: const Text('専用エディタを開く'),
+              ),
+            ),
             TextField(
               controller: _stepsController,
               decoration: const InputDecoration(
@@ -534,113 +586,14 @@ class _RecipeEditorScreenState extends State<RecipeEditorScreen> {
     );
   }
 
-  Widget _buildIngredientRow({
-    required int index,
-    required _IngredientDraft ingredient,
-    required List<UnitDefinition> units,
-    required List<String> ingredientSuggestions,
-  }) {
-    final unitNames = units.map((e) => e.name).toSet();
-    final currentUnit = ingredient.unitController.text.trim();
-    final dropdownUnits = [
-      if (currentUnit.isNotEmpty && !unitNames.contains(currentUnit))
-        UnitDefinition(id: 'custom', name: currentUnit, usesNumber: true),
-      ...units,
-    ];
-
-    final selectedUnit = currentUnit.isEmpty ? null : currentUnit;
-    final usesNumber = _usesNumberForUnit(selectedUnit, units);
-
-    if (!usesNumber && ingredient.quantityController.text.trim().isNotEmpty) {
-      ingredient.quantityController.text = '';
+  String _formatIngredientLabel(_IngredientDraft ingredient) {
+    final name = ingredient.name.trim();
+    final unit = ingredient.unitController.text.trim();
+    final quantity = ingredient.quantityController.text.trim();
+    if (quantity.isEmpty) {
+      return [name, unit].where((part) => part.isNotEmpty).join(' ');
     }
-
-    return Row(
-      children: [
-        ReorderableDragStartListener(
-          index: index,
-          child: const Padding(
-            padding: EdgeInsets.only(right: 8),
-            child: Icon(Icons.drag_handle),
-          ),
-        ),
-        Expanded(
-          flex: 3,
-          child: Autocomplete<String>(
-            initialValue: TextEditingValue(text: ingredient.name),
-            optionsBuilder: (textEditingValue) {
-              final query = textEditingValue.text.trim();
-              if (query.isEmpty) return const Iterable<String>.empty();
-              return ingredientSuggestions.where(
-                (option) => option.contains(query),
-              );
-            },
-            onSelected: (value) => ingredient.name = value,
-            fieldViewBuilder: (context, controller, focusNode, onSubmit) {
-              return TextField(
-                controller: controller,
-                focusNode: focusNode,
-                decoration: const InputDecoration(
-                  labelText: '材料名',
-                ),
-                onChanged: (value) => ingredient.name = value,
-              );
-            },
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          flex: 2,
-          child: TextField(
-            controller: ingredient.quantityController,
-            decoration: const InputDecoration(
-              labelText: '分量',
-            ),
-            keyboardType: TextInputType.number,
-            enabled: usesNumber,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          flex: 2,
-          child: DropdownButtonFormField<String>(
-            key: ValueKey(selectedUnit),
-            initialValue: selectedUnit,
-            isExpanded: true,
-            items: dropdownUnits
-                .map(
-                  (unit) => DropdownMenuItem(
-                    value: unit.name,
-                    child: Text(unit.name),
-                  ),
-                )
-                .toList(),
-            onChanged: (value) {
-              ingredient.unitController.text = value ?? '';
-              final nextUsesNumber = _usesNumberForUnit(value, units);
-              if (!nextUsesNumber) {
-                ingredient.quantityController.text = '';
-              }
-              setState(() {});
-            },
-            decoration: const InputDecoration(
-              labelText: '単位',
-            ),
-          ),
-        ),
-        IconButton(
-          onPressed: _ingredients.length == 1
-              ? null
-              : () {
-                  setState(() {
-                    final removed = _ingredients.removeAt(index);
-                    removed.dispose();
-                  });
-                },
-          icon: const Icon(Icons.remove_circle_outline),
-        ),
-      ],
-    );
+    return [name, quantity, unit].where((part) => part.isNotEmpty).join(' ');
   }
 
   bool _usesNumberForUnit(String? unitName, List<UnitDefinition> units) {
@@ -650,6 +603,212 @@ class _RecipeEditorScreenState extends State<RecipeEditorScreen> {
       orElse: () => UnitDefinition(id: 'custom', name: unitName, usesNumber: true),
     );
     return unit.usesNumber;
+  }
+
+  Future<bool?> _openIngredientEditor({
+    required _IngredientDraft ingredient,
+    required List<UnitDefinition> units,
+    required List<String> ingredientSuggestions,
+  }) async {
+    final nameController = TextEditingController(text: ingredient.name);
+    final quantityController =
+        TextEditingController(text: ingredient.quantityController.text);
+    final unitController =
+        TextEditingController(text: ingredient.unitController.text);
+    final unitNames = units.map((e) => e.name).toSet();
+
+    bool usesNumber = _usesNumberForUnit(unitController.text, units);
+    if (!usesNumber) {
+      quantityController.text = '';
+    }
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          final dropdownUnits = [
+            if (unitController.text.isNotEmpty &&
+                !unitNames.contains(unitController.text))
+              UnitDefinition(
+                id: 'custom',
+                name: unitController.text,
+                usesNumber: true,
+              ),
+            ...units,
+          ];
+          return AlertDialog(
+            title: const Text('材料を入力'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Autocomplete<String>(
+                    initialValue: TextEditingValue(text: nameController.text),
+                    optionsBuilder: (textEditingValue) {
+                      final query = textEditingValue.text.trim();
+                      if (query.isEmpty) {
+                        return const Iterable<String>.empty();
+                      }
+                      return ingredientSuggestions.where(
+                        (option) => option.contains(query),
+                      );
+                    },
+                    onSelected: (value) => nameController.text = value,
+                    fieldViewBuilder:
+                        (context, controller, focusNode, onSubmit) {
+                      controller.text = nameController.text;
+                      return TextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        decoration: const InputDecoration(
+                          labelText: '材料名',
+                        ),
+                        onChanged: (value) => nameController.text = value,
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: quantityController,
+                    decoration: const InputDecoration(labelText: '分量'),
+                    keyboardType: TextInputType.number,
+                    enabled: usesNumber,
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    key: ValueKey(unitController.text),
+                    initialValue:
+                        unitController.text.isEmpty ? null : unitController.text,
+                    items: dropdownUnits
+                        .map(
+                          (unit) => DropdownMenuItem(
+                            value: unit.name,
+                            child: Text(unit.name),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      unitController.text = value ?? '';
+                      usesNumber = _usesNumberForUnit(value, units);
+                      if (!usesNumber) {
+                        quantityController.text = '';
+                      }
+                      setState(() {});
+                    },
+                    decoration: const InputDecoration(labelText: '単位'),
+                  ),
+                  if (!usesNumber)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: Text(
+                        '数値を使わない単位が選択されています',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('キャンセル'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('保存'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (result == true) {
+      ingredient.name = nameController.text.trim();
+      ingredient.quantityController.text = quantityController.text.trim();
+      ingredient.unitController.text = unitController.text.trim();
+    }
+    return result;
+  }
+
+  Future<void> _openStepsEditor() async {
+    final controller = TextEditingController(text: _stepsController.text);
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('手順エディタ'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton(
+                  onPressed: () => _insertText(controller, '# ', ''),
+                  child: const Text('見出しH1'),
+                ),
+                OutlinedButton(
+                  onPressed: () => _insertText(controller, '## ', ''),
+                  child: const Text('見出しH2'),
+                ),
+                OutlinedButton(
+                  onPressed: () => _insertText(controller, '**', '**'),
+                  child: const Text('太字'),
+                ),
+                OutlinedButton(
+                  onPressed: () => _insertText(controller, '- ', ''),
+                  child: const Text('箇条書き'),
+                ),
+                if (_stepsFormat == StepsFormat.marp)
+                  OutlinedButton(
+                    onPressed: () => _insertText(controller, '\n---\n', ''),
+                    child: const Text('ページ区切り'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: 400,
+              child: TextField(
+                controller: controller,
+                maxLines: 10,
+                decoration: const InputDecoration(
+                  labelText: '手順を入力',
+                  alignLabelWithHint: true,
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: () {
+              _stepsController.text = controller.text;
+              Navigator.of(context).pop();
+            },
+            child: const Text('反映'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _insertText(TextEditingController controller, String prefix, String suffix) {
+    final selection = controller.selection;
+    final text = controller.text;
+    final start = selection.start < 0 ? text.length : selection.start;
+    final end = selection.end < 0 ? text.length : selection.end;
+    final selected = text.substring(start, end);
+    final replacement = '$prefix$selected$suffix';
+    controller.text = text.replaceRange(start, end, replacement);
+    final cursor = start + prefix.length + selected.length;
+    controller.selection = TextSelection.collapsed(offset: cursor);
   }
 
   Widget _buildImagePreview(_ImageDraft draft) {
