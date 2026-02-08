@@ -111,6 +111,36 @@ class _StepsEditorScreenState extends State<StepsEditorScreen> {
             icon: Icons.format_list_bulleted,
             onTap: () => _insertText('- ', ''),
           ),
+          _ToolButton(
+            label: '番号リスト',
+            icon: Icons.format_list_numbered,
+            onTap: () => _insertText('1. ', ''),
+          ),
+          _ToolButton(
+            label: 'チェック',
+            icon: Icons.check_box_outlined,
+            onTap: () => _insertText('- [ ] ', ''),
+          ),
+          _ToolButton(
+            label: '引用',
+            icon: Icons.format_quote,
+            onTap: () => _insertText('> ', ''),
+          ),
+          _ToolButton(
+            label: 'リンク',
+            icon: Icons.link,
+            onTap: () => _insertText('[', '](https://)'),
+          ),
+          _ToolButton(
+            label: 'インデント',
+            icon: Icons.format_indent_increase,
+            onTap: () => _indentSelection(),
+          ),
+          _ToolButton(
+            label: '解除',
+            icon: Icons.format_indent_decrease,
+            onTap: () => _outdentSelection(),
+          ),
           if (widget.format == StepsFormat.marp)
             _ToolButton(
               label: '改ページ',
@@ -119,6 +149,39 @@ class _StepsEditorScreenState extends State<StepsEditorScreen> {
             ),
         ],
       ),
+    );
+  }
+
+  void _indentSelection() {
+    _transformSelectedLines((line) => line.isEmpty ? line : '  $line');
+  }
+
+  void _outdentSelection() {
+    _transformSelectedLines((line) {
+      if (line.startsWith('  ')) {
+        return line.substring(2);
+      }
+      if (line.startsWith('\t')) {
+        return line.substring(1);
+      }
+      return line;
+    });
+  }
+
+  void _transformSelectedLines(String Function(String line) transform) {
+    final selection = _controller.selection;
+    final text = _controller.text;
+    final start = selection.start < 0 ? 0 : selection.start;
+    final end = selection.end < 0 ? text.length : selection.end;
+    final before = text.substring(0, start);
+    final selected = text.substring(start, end);
+    final after = text.substring(end);
+    final lines = selected.split('\n').map(transform).toList();
+    final replaced = lines.join('\n');
+    _controller.text = before + replaced + after;
+    _controller.selection = TextSelection(
+      baseOffset: start,
+      extentOffset: start + replaced.length,
     );
   }
 }
