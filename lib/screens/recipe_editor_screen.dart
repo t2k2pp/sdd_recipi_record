@@ -10,6 +10,7 @@ import '../models/recipe.dart';
 import '../models/recipe_image.dart';
 import '../models/unit_definition.dart';
 import '../services/image_service.dart';
+import 'steps_editor_screen.dart';
 
 class RecipeEditorScreen extends StatefulWidget {
   const RecipeEditorScreen({super.key, this.existing});
@@ -50,9 +51,7 @@ class _RecipeEditorScreenState extends State<RecipeEditorScreen> {
     _ingredients = (recipe?.ingredients ?? [])
         .map((e) => _IngredientDraft.fromIngredient(e))
         .toList();
-    if (_ingredients.isEmpty) {
-      _ingredients.add(_IngredientDraft());
-    }
+    // Start empty; user adds ingredients via dialog.
     _images = (recipe?.images ?? [])
         .map((e) => _ImageDraft.fromExisting(e))
         .toList();
@@ -338,11 +337,16 @@ class _RecipeEditorScreenState extends State<RecipeEditorScreen> {
                       children: [
                         IconButton(
                           icon: const Icon(Icons.edit_outlined),
-                          onPressed: () => _openIngredientEditor(
-                            ingredient: ingredient,
-                            units: units,
-                            ingredientSuggestions: ingredientSuggestions,
-                          ),
+                          onPressed: () async {
+                            final saved = await _openIngredientEditor(
+                              ingredient: ingredient,
+                              units: units,
+                              ingredientSuggestions: ingredientSuggestions,
+                            );
+                            if (saved == true) {
+                              setState(() {});
+                            }
+                          },
                         ),
                         IconButton(
                           icon: const Icon(Icons.delete_outline),
@@ -357,11 +361,16 @@ class _RecipeEditorScreenState extends State<RecipeEditorScreen> {
                         ),
                       ],
                     ),
-                    onTap: () => _openIngredientEditor(
-                      ingredient: ingredient,
-                      units: units,
-                      ingredientSuggestions: ingredientSuggestions,
-                    ),
+                    onTap: () async {
+                      final saved = await _openIngredientEditor(
+                        ingredient: ingredient,
+                        units: units,
+                        ingredientSuggestions: ingredientSuggestions,
+                      );
+                      if (saved == true) {
+                        setState(() {});
+                      }
+                    },
                   );
                 },
               ),
@@ -733,82 +742,19 @@ class _RecipeEditorScreenState extends State<RecipeEditorScreen> {
   }
 
   Future<void> _openStepsEditor() async {
-    final controller = TextEditingController(text: _stepsController.text);
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('手順エディタ'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                OutlinedButton(
-                  onPressed: () => _insertText(controller, '# ', ''),
-                  child: const Text('見出しH1'),
-                ),
-                OutlinedButton(
-                  onPressed: () => _insertText(controller, '## ', ''),
-                  child: const Text('見出しH2'),
-                ),
-                OutlinedButton(
-                  onPressed: () => _insertText(controller, '**', '**'),
-                  child: const Text('太字'),
-                ),
-                OutlinedButton(
-                  onPressed: () => _insertText(controller, '- ', ''),
-                  child: const Text('箇条書き'),
-                ),
-                if (_stepsFormat == StepsFormat.marp)
-                  OutlinedButton(
-                    onPressed: () => _insertText(controller, '\n---\n', ''),
-                    child: const Text('ページ区切り'),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: 400,
-              child: TextField(
-                controller: controller,
-                maxLines: 10,
-                decoration: const InputDecoration(
-                  labelText: '手順を入力',
-                  alignLabelWithHint: true,
-                ),
-              ),
-            ),
-          ],
+    final updated = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => StepsEditorScreen(
+          initialText: _stepsController.text,
+          format: _stepsFormat,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('キャンセル'),
-          ),
-          FilledButton(
-            onPressed: () {
-              _stepsController.text = controller.text;
-              Navigator.of(context).pop();
-            },
-            child: const Text('反映'),
-          ),
-        ],
       ),
     );
-  }
-
-  void _insertText(TextEditingController controller, String prefix, String suffix) {
-    final selection = controller.selection;
-    final text = controller.text;
-    final start = selection.start < 0 ? text.length : selection.start;
-    final end = selection.end < 0 ? text.length : selection.end;
-    final selected = text.substring(start, end);
-    final replacement = '$prefix$selected$suffix';
-    controller.text = text.replaceRange(start, end, replacement);
-    final cursor = start + prefix.length + selected.length;
-    controller.selection = TextSelection.collapsed(offset: cursor);
+    if (updated == null) return;
+    setState(() {
+      _stepsController.text = updated;
+    });
   }
 
   Widget _buildImagePreview(_ImageDraft draft) {
